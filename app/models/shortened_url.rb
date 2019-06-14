@@ -1,6 +1,7 @@
 class ShortenedUrl < ApplicationRecord
   validates :long_url, :short_url, presence: true, uniqueness: true
   validates :user_id, presence: true, uniqueness: false
+  validate :no_spamming, :nonpremium_max
 
   belongs_to :submitter,
     primary_key: :id,
@@ -49,6 +50,22 @@ class ShortenedUrl < ApplicationRecord
   end
 
   def num_recent_uniques
-    self.visits.select(:user_id).where(" ? > created_at", 10.minutes.ago).distinct.count()
+    self.visits.select(:user_id).where(" ? > created_at", 10.minutes.ago).distinct.count() # Violating Law of Demeter, I know
+  end
+
+  private
+  def no_spamming
+    user = User.find(self.user_id)
+    fifth_to_last = user.submitted_urls[5]
+    if fifth_to_last && fifth_to_last.created_at < 1.minutes.ago
+      errors[:user] << "Can't submit more than 5 URLs in a single minute!"
+    end
+  end
+
+  def nonpremium_max
+    user = User.find(self.user_id)
+    if user.submitted_urls[5] && !user.premium
+      errors[:user] << "Non-premium users limited to 5 submitted URLs"
+    end
   end
 end
